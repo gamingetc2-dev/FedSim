@@ -1718,12 +1718,12 @@ function showEventModal(eventKey, passiveEvent) {
 
   const modal = document.getElementById('event-modal');
   modal.style.display = 'flex';
-  // Pause game — disable advance button while modal open
-  document.getElementById('next-btn').disabled = true;
+  // next-btn was already disabled in nextMonth() before applyPolicy() was called
 }
 
 function resolveEventChoice(ev, choice) {
   document.getElementById('event-modal').style.display = 'none';
+  // Always re-enable — this is the authoritative unlock point for event modals
   document.getElementById('next-btn').disabled = false;
 
   // Apply effects
@@ -2458,7 +2458,20 @@ function generateReactionComments(appliedRateDelta, taylorRate) {
 // ── MONTH ADVANCE ──────────────────────────────────────────────────────────────
 function nextMonth() {
   if (!state || state.monthIdx === undefined) return;
+
+  // Prevent double-advance
+  const btn = document.getElementById('next-btn');
+  btn.disabled = true;
+
   const rm = realMonth();
+  const isMeetingMonth = rm.isMeeting === 1;
+
+  // Check if this month has an interactive event BEFORE applying policy
+  // so we can block advancement until the player resolves it.
+  const ym = rm.date.slice(0, 7);
+  const hasInteractiveEvent = rm.event && rm.event.effects
+    && !state.firedEvents.has(rm.date)
+    && INTERACTIVE_EVENTS[ym];
 
   // Apply policy for this month (uses current monthIdx)
   const appliedRateDelta = state.pendingRateDelta;
@@ -2469,7 +2482,6 @@ function nextMonth() {
   state.fedScore += computeFedScore();
 
   // Generate stakeholder reaction comments on FOMC meeting months
-  const isMeetingMonth = eraData[state.monthIdx] && eraData[state.monthIdx].isMeeting === 1;
   if (isMeetingMonth) {
     generateReactionComments(appliedRateDelta, taylorRate);
     evaluateCharacterTriggers(appliedRateDelta, taylorRate);
@@ -2508,6 +2520,13 @@ function nextMonth() {
 
   document.getElementById('recession-banner').style.display        = state.inRecession ? 'block' : 'none';
   document.getElementById('inflation-crisis-banner').style.display = state.inflationCrisisMonths >= 3 ? 'block' : 'none';
+
+  // Re-enable button only if no interactive event modal is about to show
+  if (!hasInteractiveEvent) {
+    btn.disabled = false;
+  }
+  // If hasInteractiveEvent, the modal was triggered inside applyPolicy() via setTimeout.
+  // resolveEventChoice() will re-enable the button after the player chooses.
 }
 
 // ── CONTROLS ───────────────────────────────────────────────────────────────────
